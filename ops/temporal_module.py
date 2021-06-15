@@ -11,7 +11,7 @@ import torchvision
 
 class TAM(nn.Module):
     def __init__(self,
-                 in_channels,
+                 in_channels, 
                  n_segment,
                  kernel_size=3,
                  stride=1,
@@ -41,25 +41,23 @@ class TAM(nn.Module):
             nn.Sigmoid())
 
     def forward(self, x):
-        # x.size = N*C*T*(H*W)
         nt, c, h, w = x.size()
         t = self.n_segment
         n_batch = nt // t
-        new_x = x.view(n_batch, t, c, h, w).permute(0, 2, 1, 3,
-                                                     4).contiguous()
-        out = F.adaptive_avg_pool2d(new_x.view(n_batch * c, t, h, w), (1, 1))
-        out = out.view(-1, t)
-        conv_kernel = self.G(out.view(-1, t)).view(n_batch * c, 1, -1, 1)
+        new_x = x.view(n_batch, t, c, h, w).permute(0, 2, 1, 3,4).contiguous()  # [1,4,192,13,13]
+        out = F.adaptive_avg_pool2d(new_x.view(n_batch * c, t, h, w), (1, 1))   # [192,4,1,1]
+        out = out.view(-1, t)                                                   # [192,4]
+        conv_kernel = self.G(out.view(-1, t)).view(n_batch * c, 1, -1, 1)        
         local_activation = self.L(out.view(n_batch, c,
-                                           t)).view(n_batch, c, t, 1, 1)
-        new_x = new_x * local_activation
-        out = F.conv2d(new_x.view(1, n_batch * c, t, h * w),
-                       conv_kernel,
+                                           t)).view(n_batch, c, t, 1, 1)        # [1,192,4,1,1]
+        new_x = new_x * local_activation                                        
+        out = F.conv2d(new_x.view(1, n_batch * c, t, h * w),                    # [1,192,4,169]
+                       conv_kernel,                                             # [192,1,3,1]
                        bias=None,
                        stride=(self.stride, 1),
-                       padding=(self.padding, 0),
-                       groups=n_batch * c)
-        out = out.view(n_batch, c, t, h, w)
+                       padding=(self.padding, 0),                               
+                       groups=n_batch * c)                                      # 192
+        out = out.view(n_batch, c, t, h, w)                                     # [1,192,4,169]
         out = out.permute(0, 2, 1, 3, 4).contiguous().view(nt, c, h, w)
 
         return out
